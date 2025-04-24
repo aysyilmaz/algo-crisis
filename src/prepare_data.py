@@ -1,8 +1,11 @@
-
-import yfinance as yf
-import pandas as pd
 import os
+from src.data_loader import load_data
+from src.preprocess import preprocess_data
+from src.models import train_logistic, train_linear
+from src.evaluate import evaluate_classification, evaluate_regression
+from src.utils import split_periods
 
+# Parameters
 tickers = ["^GSPC", "^GDAXI", "^N225", "XU100.IS", "^BVSP", "^BSESN", "NGE", "PAK"]
 start_date = "2005-01-01"
 end_date = "2023-12-31"
@@ -13,33 +16,33 @@ os.makedirs("data/processed", exist_ok=True)
 
 for ticker in tickers:
     print(f"📥 Downloading {ticker}...")
-    data = yf.download(ticker, start=start_date, end=end_date)
+    data = load_data(ticker, start_date, end_date)
 
     if data.empty:
         print(f"⚠️ Skipping {ticker}: download returned empty data.")
         continue
 
-    # Save raw file
+    # Save raw data
     clean_name = ticker.replace("^", "")
     raw_path = f"data/raw/{clean_name}_{start_date[:4]}_{end_date[:4]}.csv"
     data.to_csv(raw_path, index_label="Date")
 
-    # Check column before processing
-    if 'Close' not in data.columns:
-        print(f"⚠️ Skipping {ticker}: 'Close' column not found.")
-        continue
+    # Preprocess data
+    df = preprocess_data(data)
 
-    # Preprocess
-    df = data.copy()
-    df['Return'] = df['Close'].pct_change()
-    df['Direction'] = (df['Return'] > 0).astype(int)
-    for i in range(1, 4):
-        df[f'Lag_{i}'] = df['Return'].shift(i)
-    df.dropna(inplace=True)
+    # Split data by periods
+    periods = split_periods(df)
 
-    # Save processed
+    # You can now proceed with training and evaluating models
+    # Example: Train logistic regression on 'Pre-Crisis'
+    X = periods['Pre-Crisis'][['Lag_1', 'Lag_2', 'Lag_3']]
+    y = periods['Pre-Crisis']['Direction']
+    model_logistic = train_logistic(X, y)
+    acc = evaluate_classification(model_logistic, X, y)
+    print(f"Accuracy for {ticker} (Pre-Crisis): {acc}")
+    
+    # Save processed data
     processed_path = f"data/processed/{clean_name}_processed.csv"
     df.to_csv(processed_path, index_label="Date")
-    print(f"✅ Finished {ticker}")
 
-print("All tickers downloaded and processed.")
+print("All tickers downloaded, processed, and saved.")
